@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { BingoSquareData, BingoLine, GameState } from '../types';
 import {
   generateBoard,
@@ -197,6 +197,10 @@ export function useBingoGame(): BingoGameState & BingoGameActions {
   const [playerName, setPlayerName] = useState<string>(() => loadPlayerName());
   const [winsCount, setWinsCount] = useState<number>(() => loadWinsCount());
 
+  // Refs to coordinate bingo side-effects outside of the setBoard updater
+  const bingoPendingRef = useRef<BingoLine | null>(null);
+  const winsIncrementPendingRef = useRef(false);
+
   const winningSquareIds = useMemo(
     () => getWinningSquareIds(winningLine),
     [winningLine]
@@ -226,37 +230,55 @@ export function useBingoGame(): BingoGameState & BingoGameActions {
     setWinningLine(null);
     setGameState('playing');
     setShowBingoModal(false);
+    // Clear any pending bingo side-effects when starting a new card
+    bingoPendingRef.current = null;
+    winsIncrementPendingRef.current = false;
   }, []);
 
-  const handleSquareClick = useCallback((squareId: number) => {
-    setBoard((currentBoard) => {
-      const newBoard = toggleSquare(currentBoard, squareId);
-      
-      // Check for bingo after toggling
-      const bingo = checkBingo(newBoard);
-      if (bingo && !winningLine) {
-        // Schedule state updates to avoid synchronous setState in effect
-        queueMicrotask(() => {
-          setWinningLine(bingo);
-          setGameState('bingo');
-          setShowBingoModal(true);
-          setWinsCount((prev) => {
-            const next = prev + 1;
-            saveWinsCount(next);
-            return next;
-          });
+  const handleSquareClick = useCallback(
+    (squareId: number) => {
+      setBoard((currentBoard) => {
+        const newBoard = toggleSquare(currentBoard, squareId);
+
+        // Check for bingo after toggling
+        const bingo = checkBingo(newBoard);
+        if (bingo && !winningLine && !winsIncrementPendingRef.current) {
+          // Record bingo; actual side-effects will run after setBoard returns
+          bingoPendingRef.current = bingo;
+          winsIncrementPendingRef.current = true;
+        }
+
+        return newBoard;
+      });
+
+      // Run bingo side-effects outside of the setBoard updater
+      if (winsIncrementPendingRef.current && bingoPendingRef.current) {
+        const bingo = bingoPendingRef.current;
+        // Clear refs before performing side-effects to avoid re-entry issues
+        bingoPendingRef.current = null;
+        winsIncrementPendingRef.current = false;
+
+        setWinningLine(bingo);
+        setGameState('bingo');
+        setShowBingoModal(true);
+        setWinsCount((prev) => {
+          const next = prev + 1;
+          saveWinsCount(next);
+          return next;
         });
       }
-      
-      return newBoard;
-    });
-  }, [winningLine]);
+    },
+    [winningLine]
+  );
 
   const resetGame = useCallback(() => {
     setGameState('start');
     setBoard([]);
     setWinningLine(null);
     setShowBingoModal(false);
+    // Clear any pending bingo side-effects when resetting the game
+    bingoPendingRef.current = null;
+    winsIncrementPendingRef.current = false;
   }, []);
 
   const dismissModal = useCallback(() => {
