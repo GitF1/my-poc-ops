@@ -13,16 +13,22 @@ export interface BingoGameState {
   winningLine: BingoLine | null;
   winningSquareIds: Set<number>;
   showBingoModal: boolean;
+  playerName: string;
+  winsCount: number;
+  markedCount: number;
 }
 
 export interface BingoGameActions {
-  startGame: () => void;
+  startGame: (name: string) => void;
   handleSquareClick: (squareId: number) => void;
   resetGame: () => void;
   dismissModal: () => void;
+  newCard: () => void;
 }
 
 const STORAGE_KEY = 'bingo-game-state';
+const STORAGE_KEY_PLAYER = 'bingo-player-name';
+const STORAGE_KEY_WINS = 'bingo-wins-count';
 const STORAGE_VERSION = 1;
 
 interface StoredGameData {
@@ -137,6 +143,44 @@ function saveGameState(gameState: GameState, board: BingoSquareData[], winningLi
   }
 }
 
+function loadPlayerName(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(STORAGE_KEY_PLAYER) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function savePlayerName(name: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PLAYER, name);
+  } catch {
+    // ignore
+  }
+}
+
+function loadWinsCount(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_WINS);
+    const parsed = raw !== null ? parseInt(raw, 10) : 0;
+    return isNaN(parsed) ? 0 : parsed;
+  } catch {
+    return 0;
+  }
+}
+
+function saveWinsCount(count: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_WINS, String(count));
+  } catch {
+    // ignore
+  }
+}
+
 export function useBingoGame(): BingoGameState & BingoGameActions {
   const loadedState = useMemo(() => loadGameState(), []);
 
@@ -150,10 +194,17 @@ export function useBingoGame(): BingoGameState & BingoGameActions {
     () => loadedState?.winningLine || null
   );
   const [showBingoModal, setShowBingoModal] = useState(false);
+  const [playerName, setPlayerName] = useState<string>(() => loadPlayerName());
+  const [winsCount, setWinsCount] = useState<number>(() => loadWinsCount());
 
   const winningSquareIds = useMemo(
     () => getWinningSquareIds(winningLine),
     [winningLine]
+  );
+
+  const markedCount = useMemo(
+    () => board.filter((sq) => sq.isMarked && !sq.isFreeSpace).length,
+    [board]
   );
 
   // Save game state to localStorage whenever it changes
@@ -161,10 +212,20 @@ export function useBingoGame(): BingoGameState & BingoGameActions {
     saveGameState(gameState, board, winningLine);
   }, [gameState, board, winningLine]);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback((name: string) => {
+    const trimmed = name.trim();
+    setPlayerName(trimmed);
+    savePlayerName(trimmed);
     setBoard(generateBoard());
     setWinningLine(null);
     setGameState('playing');
+  }, []);
+
+  const newCard = useCallback(() => {
+    setBoard(generateBoard());
+    setWinningLine(null);
+    setGameState('playing');
+    setShowBingoModal(false);
   }, []);
 
   const handleSquareClick = useCallback((squareId: number) => {
@@ -179,6 +240,11 @@ export function useBingoGame(): BingoGameState & BingoGameActions {
           setWinningLine(bingo);
           setGameState('bingo');
           setShowBingoModal(true);
+          setWinsCount((prev) => {
+            const next = prev + 1;
+            saveWinsCount(next);
+            return next;
+          });
         });
       }
       
@@ -203,9 +269,13 @@ export function useBingoGame(): BingoGameState & BingoGameActions {
     winningLine,
     winningSquareIds,
     showBingoModal,
+    playerName,
+    winsCount,
+    markedCount,
     startGame,
     handleSquareClick,
     resetGame,
     dismissModal,
+    newCard,
   };
 }

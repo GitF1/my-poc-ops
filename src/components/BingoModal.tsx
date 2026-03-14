@@ -1,14 +1,17 @@
 interface BingoModalProps {
   onDismiss: () => void;
+  playerName: string;
 }
 
-export function BingoModal({ onDismiss }: BingoModalProps) {
+export function BingoModal({ onDismiss, playerName }: BingoModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl p-6 max-w-xs w-full text-center shadow-xl animate-[bounce_0.5s_ease-out]">
         <div className="text-5xl mb-4">🎉</div>
         <h2 className="text-3xl font-bold text-amber-500 mb-2">BINGO!</h2>
-        <p className="text-gray-600 mb-6">You completed a line!</p>
+        <p className="text-gray-600 mb-6">
+          {playerName ? `${playerName}, you completed a line!` : 'You completed a line!'}
+        </p>
         
         <button
           onClick={onDismiss}
